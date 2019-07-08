@@ -57,8 +57,9 @@ function replace(file) {
             .replace(/ NULL/g, ' null')
             .replace(/(N)('.*')/g, '$2') // default N'@UNKNOWN'
             .replace(/DEFAULT/g, 'default')
-            .replace(/CURRENT_TIMESTAMP/g, 'current_timestamp')
             .replace(/AS COALESCE/g, '= COALESCE')
+            .replace(/null default\s([\w\.]+)/g, 'null default \'$1\'')
+            .replace(/\'current_timestamp\'/ig, 'current_timestamp')
 
             .replace(/SMALLINT/g, ': Integer')
             .replace(/NVARCHAR\(/g, ': String(')
@@ -72,11 +73,11 @@ function replace(file) {
             .replace(/FLOAT/g, ': Decimal(24,6)')
             .replace(/NUMERIC/g, ': Decimal')
             .replace(/DECIMAL/g, ': Decimal')
-            .replace(/ TIMESTAMP/g, ' : Timestamp')
-            .replace(/VARBINARY/g, ': Varbinary')
-            .replace(/BINARY/g, ': Binary')
-            .replace(/TEXT/g, ': Text')
-            .replace(/DATE/g, ': Date')
+            .replace(/ TIMESTAMP/g, ' : UTCTimestamp')
+            .replace(/VARBINARY/g, ': Binary(100)')
+            .replace(/BINARY/g, ': Binary(100)')
+            .replace(/TEXT/g, ': LargeString')
+            .replace(/DATE/g, ': LocalDate')
             
             .replace(/\"\s?\(/g, '"{')
             .replace(/\/\*w*\*\//g, '')
