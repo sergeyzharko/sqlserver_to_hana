@@ -3,10 +3,9 @@
 По умолчанию применяются значения: "sap-hana-ddl" и "src"
 */
 
-// добавить создание архива src в конце
-
 const path = require('path');
 const fs = require('fs');
+var zipFolder = require('zip-folder');
 
 const inputFolder = process.argv[2] || 'sap-hana-ddl';
 const outputFolder = process.argv[3] || 'src';
@@ -85,15 +84,23 @@ function replace(file) {
         if (!fs.existsSync(outputFolder)) { fs.mkdirSync(outputFolder) }
 
         let newFolder = path.join(__dirname, outputFolder, subParentDir);
+        if (!fs.existsSync(newFolder)) { fs.mkdirSync(path.join(newFolder)) };
 
-        if (!fs.existsSync(newFolder)) { fs.mkdirSync(path.join(newFolder)) }
         let newName = path.join(newFolder, path.dirname(file).split(path.sep).pop() + '.hdbcds');
         console.log(newName);
-
-        fs.writeFile(newName, result, 'utf8', function (err) {
-           if (err) return console.log(err);
-        });
+        fs.writeFileSync(newName, result, 'utf8');
       });
 }
 
+function zipping(){
+    zipFolder('src', path.join('src.zip'), function(err) {
+        if(err) {
+            console.log('Zipping error', err);
+        } else {
+            console.log('Zipped');
+        }
+    });
+}
+
 traverseDir(directoryPath);
+zipping();
