@@ -3,6 +3,7 @@
 # compiled output
 /sap-hana-ddl
 /src
+/.zip
 
 # dependencies
 /node_modules
