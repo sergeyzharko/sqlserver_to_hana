@@ -8,39 +8,70 @@
 const path = require('path');
 const fs = require('fs');
 var zipFolder = require('zip-folder');
+const { promisify } = require('util');
+const readDir = promisify(fs.readdir);
+const readFile = promisify(fs.readFile);
+const lstat = promisify(fs.lstat);
 
 const inputFolder = process.argv[2] || 'sap-hana-ddl';
 const outputFolder = process.argv[3] || 'src';
 
 const directoryPath = path.join(__dirname, inputFolder); // источник
 
-function traverseDir(dir, first) { // рекурсивный перебор файлов
-    fs.readdir(dir, (err, files) => {
-        if (err) {
-            return console.log('Unable to scan directory: ' + err);
-        } 
-        files.forEach(file => {
-            let fullPath = path.join(dir, file);
-            fs.lstat(fullPath, (err, stats) => {
-                if (err) {
-                    return console.log(err);
-                }
-                if (stats.isDirectory()) {
-                    traverseDir(fullPath);
-                } else {
-                    console.log(fullPath);
-                    replace(fullPath);
-                }
-            })
-        });
-    });
+// function traverseDir(dir, first) { // рекурсивный перебор файлов
+//     fs.readdir(dir, (err, files) => {
+//         if (err) {
+//             return console.log('Unable to scan directory: ' + err);
+//         } 
+//         files.forEach(file => {
+//             let fullPath = path.join(dir, file);
+//             fs.lstat(fullPath, (err, stats) => {
+//                 if (err) {
+//                     return console.log(err);
+//                 }
+//                 if (stats.isDirectory()) {
+//                     traverseDir(fullPath);
+//                 } else {
+//                     console.log(fullPath);
+//                     replace(fullPath);
+//                 }
+//             })
+//         });
+//     });
+// }
+
+
+async function traverseDir(dir, first) {
+  // рекурсивный перебор файлов
+  const files = await readDir(dir);
+  try {
+    await Promise.all(
+      files.map(file =>
+        (async () => {
+          try {
+            const fullPath = path.join(dir, file);
+            const stats = await lstat(fullPath);
+            if (stats.isDirectory()) {
+              await traverseDir(fullPath);
+            } else {
+              console.log(fullPath);
+              await replace(fullPath);
+            }
+          } catch (err) {
+            return console.log(err);
+          }
+        })(),
+      ),
+    );
+  } catch (err) {
+    return console.log('Unable to scan directory: ' + err);
+  }
 }
 
-function replace(file) {
-    fs.readFile(file, 'utf8', function (err,data) {
-        if (err) {
-          return console.log(err);
-        }
+
+
+async function replace(file) {
+    let data = await readFile(file, 'utf8');
         var parentDir = path.dirname(file).split(path.sep).pop(); // имя папки файла
         var subParentDir = path.dirname(file).split(path.sep)[path.dirname(file).split(path.sep).length - 2]; // имя папки файла
         var result = data
@@ -104,7 +135,7 @@ function replace(file) {
         let newName = path.join(newFolder, path.dirname(file).split(path.sep).pop() + '.hdbcds');
         console.log(newName);
         fs.writeFileSync(newName, result, 'utf8');
-      });
+
 }
 
 function zipping(){
@@ -117,6 +148,10 @@ function zipping(){
     });
 }
 
-traverseDir(directoryPath, true);
+// traverseDir(directoryPath, true);
 
-setTimeout(zipping, 2000);
+traverseDir(directoryPath)
+  .then(() => zipping())
+  .catch(err => console.trace(err));
+
+//setTimeout(zipping, 2000);

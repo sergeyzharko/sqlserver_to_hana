@@ -1,0 +1,23 @@
+{
+  "name": "gmda_db",
+  "version": "1.0.0",
+  "description": "Запуск:\r 1. npm i (для установки архиватора).\r 2. node sqlhana input output, где \"input\" - папка со скриптами mssql, \"output\" - папка для hana скриптов. По умолчанию применяются значения: \"sap-hana-ddl\" и \"src\".",
+  "main": "sqlhana.js",
+  "dependencies": {
+    "zip-folder": "^1.0.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sergeyzharko/sqlserver_to_hana.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sergeyzharko/sqlserver_to_hana/issues"
+  },
+  "homepage": "https://github.com/sergeyzharko/sqlserver_to_hana#readme"
+}
