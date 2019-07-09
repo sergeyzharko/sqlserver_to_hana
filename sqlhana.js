@@ -72,7 +72,8 @@ async function replace(file) {
         let lastChar = data.indexOf('::');
         let entity = data.slice(createString+14, lastChar)
         // var parentDir = data.search(/CREATE TABLE \"\w+\:\:/); // namespace from DDL
-        var subParentDir = path.dirname(file).split(path.sep)[path.dirname(file).split(path.sep).length - 2]; // имя папки файла
+        // var subParentDir = path.dirname(file).split(path.sep)[path.dirname(file).split(path.sep).length - 2]; // имя папки файла
+        let fileName = path.dirname(file).split(path.sep).pop();
         var result = data
         
             .replace(/\r/g, "") // перевести систему пробелов из CRLF в LF
@@ -82,8 +83,7 @@ async function replace(file) {
             //.replace(/(CREATE TABLE.*\"\(\n  )(\"[^\;]*\;)(\n\nALTER.+\;)/g, '$1key $2')
                 // costraints:
                 // CREATE TABLE - любые символы - "(\n  
-                // " - любые символы кроме ; - ;\nALTER
-     
+                // " - любые символы кроме ; - ;\nALTER    
 
             .replace(/(\s\s.*[^\,\(\t\s]$)/gm, '$1;') // добавить ; в конце последней строки (нет , ()
             //.replace(/(\s\s.*)\,$/gm, '$1;') // добавить ; в конце каждоый строки
@@ -94,7 +94,7 @@ async function replace(file) {
             .replace(/ NULL/g, ' null')
             .replace(/(N)('.*')/g, '$2') // default N'@UNKNOWN'
             .replace(/DEFAULT/g, 'default')
-            .replace(/AS COALESCE/g, '= COALESCE')
+            .replace(/AS COALESCE/g, ': Integer = COALESCE')
             .replace(/null default\s([\w\.]+)/g, 'null default \'$1\'') // добавить кавычки
             .replace(/\'current_timestamp\'/ig, 'current_timestamp') // убрать кавчки
 
@@ -125,7 +125,7 @@ async function replace(file) {
             .replace(/(\w+\:\:\w+\.)(\w+)/g, '$2'); // название таблицы
 
             // result = 'namespace sap_hana_ddl.' + ' {\n' + result + '\n\n};';
-           result = `namespace sap_hana_ddl.${subParentDir};\n\ncontext ${entity} {\n${result}\n\n};`;
+           result = `namespace ${entity};\n\ncontext ${fileName} {\n${result}\n\n};`;
         // result = 'namespace sap_hana_ddl.' + subParentDir + ';\n\ncontext ' + parentDir + ' {\n' + result + '\n\n};';
         // добавление кода в начало и конец файла
 
@@ -134,7 +134,7 @@ async function replace(file) {
         let newFolder = path.join(outputFolder, entity);
         if (!fs.existsSync(newFolder)) { fs.mkdirSync(path.join(newFolder)) };
 
-        let newName = path.join(newFolder, path.dirname(file).split(path.sep).pop() + '.hdbcds');
+        let newName = path.join(newFolder, fileName + '.hdbcds');
         console.log('\t', newName);
         fs.writeFileSync(newName, result, 'utf8');
 
