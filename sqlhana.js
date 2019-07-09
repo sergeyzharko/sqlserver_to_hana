@@ -14,20 +14,24 @@ const outputFolder = process.argv[3] || 'src';
 
 const directoryPath = path.join(__dirname, inputFolder); // источник
 
-function traverseDir(dir) { // рекурсивный перебор файлов
-    fs.readdir(dir, function (err, files) {
+function traverseDir(dir, first) { // рекурсивный перебор файлов
+    fs.readdir(dir, (err, files) => {
         if (err) {
             return console.log('Unable to scan directory: ' + err);
         } 
-
         files.forEach(file => {
             let fullPath = path.join(dir, file);
-            if (fs.lstatSync(fullPath).isDirectory()) {
-                traverseDir(fullPath);
-            } else {
-                console.log(fullPath);
-                replace(fullPath);
-            }  
+            fs.lstat(fullPath, (err, stats) => {
+                if (err) {
+                    return console.log(err);
+                }
+                if (stats.isDirectory()) {
+                    traverseDir(fullPath);
+                } else {
+                    console.log(fullPath);
+                    replace(fullPath);
+                }
+            })
         });
     });
 }
@@ -58,8 +62,8 @@ function replace(file) {
             .replace(/(N)('.*')/g, '$2') // default N'@UNKNOWN'
             .replace(/DEFAULT/g, 'default')
             .replace(/AS COALESCE/g, '= COALESCE')
-            .replace(/null default\s([\w\.]+)/g, 'null default \'$1\'')
-            .replace(/\'current_timestamp\'/ig, 'current_timestamp')
+            .replace(/null default\s([\w\.]+)/g, 'null default \'$1\'') // добавить кавычки
+            .replace(/\'current_timestamp\'/ig, 'current_timestamp') // убрать кавчки
 
             .replace(/SMALLINT/g, ': Integer')
             .replace(/NVARCHAR\(/g, ': String(')
@@ -79,12 +83,12 @@ function replace(file) {
             .replace(/TEXT/g, ': LargeString')
             .replace(/DATE/g, ': LocalDate')
             
-            .replace(/\"\s?\(/g, '"{')
-            .replace(/\/\*w*\*\//g, '')
-            .replace(/\,$/gm, ';')
+            .replace(/\"\s?\(/g, '"{') // скобка после названия таблицы
+            .replace(/\/\*w*\*\//g, '') // убрать комментарии
+            .replace(/\,$/gm, ';') // ; в конце каждоый строки вместо ,
             //.replace(/(\d+)\;(\d+)/g, '$1,$2') // ; между двумя числами;
             .replace(/^/gm, "\t") // добавить табуляцию в начало строки
-            .replace(/\n\t\n\t\n/gm, '\n\n')
+            .replace(/\n\t\n\t\n/gm, '\n\n') // лишние пустые строки
             .replace(/(\w+\:\:\w+\.)(\w+)/g, '$2'); // название таблицы
 
             // result = 'namespace sap_hana_ddl.' + ' {\n' + result + '\n\n};';
@@ -113,6 +117,6 @@ function zipping(){
     });
 }
 
-traverseDir(directoryPath);
+traverseDir(directoryPath, true);
 
 setTimeout(zipping, 2000);
