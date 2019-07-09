@@ -7,5 +7,7 @@
     "inputFolder" - папка со скриптами mssql. По умолчанию "sap-hana-ddl" в папке с программой;
 
     "outputFolder" - папка для HANA 2.0 CDS скриптов. По умолчанию "src" в папке с программой;
-    
+
     "zip-file" - путь к готовый ZIP архиву для импорта в SAP HANA 2.0.
+
+Пример запуска: node sqlhana "D:\Desktop\input" "D:\Desktop\output" "D:\Desktop\src.zip"
