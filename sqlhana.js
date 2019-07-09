@@ -67,17 +67,24 @@ async function traverseDir(dir, first) {
 
 async function replace(file) {
     let data = await readFile(file, 'utf8');
-        var parentDir = path.dirname(file).split(path.sep).pop(); // имя папки файла
+        // var parentDir = path.dirname(file).split(path.sep).pop(); // имя папки файла
+        let createString = data.search(/CREATE TABLE \"\w+\:\:/);
+        let lastChar = data.indexOf('::');
+        let entity = data.slice(createString+14, lastChar)
+        // var parentDir = data.search(/CREATE TABLE \"\w+\:\:/); // namespace from DDL
         var subParentDir = path.dirname(file).split(path.sep)[path.dirname(file).split(path.sep).length - 2]; // имя папки файла
         var result = data
         
             .replace(/\r/g, "") // перевести систему пробелов из CRLF в LF
             .replace(/(\/\*).*(\*\/)/g, '') // комментарий
-            .replace(/(CREATE TABLE.*\"\(\n  )(\"[^\;]*\;)(\n\nALTER.+\;)/g, '$1key $2')
+            
+            .replace(/(ALTER.+)\;/g, '// $1')
+            //.replace(/(CREATE TABLE.*\"\(\n  )(\"[^\;]*\;)(\n\nALTER.+\;)/g, '$1key $2')
                 // costraints:
                 // CREATE TABLE - любые символы - "(\n  
                 // " - любые символы кроме ; - ;\nALTER
      
+
             .replace(/(\s\s.*[^\,\(\t\s]$)/gm, '$1;') // добавить ; в конце последней строки (нет , ()
             //.replace(/(\s\s.*)\,$/gm, '$1;') // добавить ; в конце каждоый строки
             .replace(/\n\)\;/g, `\n}\ntechnical configuration {\n\tcolumn store;\n};`)
@@ -98,7 +105,7 @@ async function replace(file) {
             .replace(/BIGINT/g, ': Integer')
             .replace(/TINYINT/g, ': Integer')
             .replace(/INTEGER/g, ': Integer')
-            .replace(/INT/g, ': Integer')
+            .replace(/\sINT/g, ' : Integer')
             .replace(/REAL/g, ': Decimal(24,6)')
             .replace(/FLOAT/g, ': Decimal(24,6)')
             .replace(/NUMERIC/g, ': Decimal')
@@ -118,13 +125,13 @@ async function replace(file) {
             .replace(/(\w+\:\:\w+\.)(\w+)/g, '$2'); // название таблицы
 
             // result = 'namespace sap_hana_ddl.' + ' {\n' + result + '\n\n};';
-           result = `namespace sap_hana_ddl.${subParentDir};\n\ncontext ${parentDir} {\n${result}\n\n};`;
+           result = `namespace sap_hana_ddl.${subParentDir};\n\ncontext ${entity} {\n${result}\n\n};`;
         // result = 'namespace sap_hana_ddl.' + subParentDir + ';\n\ncontext ' + parentDir + ' {\n' + result + '\n\n};';
         // добавление кода в начало и конец файла
 
         if (!fs.existsSync(outputFolder)) { fs.mkdirSync(outputFolder) }
 
-        let newFolder = path.join(outputFolder, subParentDir);
+        let newFolder = path.join(outputFolder, entity);
         if (!fs.existsSync(newFolder)) { fs.mkdirSync(path.join(newFolder)) };
 
         let newName = path.join(newFolder, path.dirname(file).split(path.sep).pop() + '.hdbcds');
