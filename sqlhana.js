@@ -1,10 +1,3 @@
-/*
-Запуск:
-    npm i
-    node sqlhana input output, где "input" - папка со скриптами mssql, "output" - папка для hana скриптов
-По умолчанию применяются значения: "sap-hana-ddl" и "src"
-*/
-
 const path = require('path');
 const fs = require('fs');
 var zipFolder = require('zip-folder');
@@ -13,10 +6,14 @@ const readDir = promisify(fs.readdir);
 const readFile = promisify(fs.readFile);
 const lstat = promisify(fs.lstat);
 
-const inputFolder = process.argv[2] || 'sap-hana-ddl';
-const outputFolder = process.argv[3] || 'src';
+const inputFolder = process.argv[2] || path.join(__dirname, 'sap-hana-ddl');
+console.log("input: ", inputFolder);
+const outputFolder = process.argv[3] || path.join(__dirname, 'src');
+console.log("output: ", outputFolder);
+const zipFile = process.argv[4] || path.join(__dirname, 'src.zip');
+console.log("output: ", outputFolder);
 
-const directoryPath = path.join(__dirname, inputFolder); // источник
+//const directoryPath = path.join(__dirname, inputFolder); // источник
 
 // function traverseDir(dir, first) { // рекурсивный перебор файлов
 //     fs.readdir(dir, (err, files) => {
@@ -129,7 +126,7 @@ async function replace(file) {
 
         if (!fs.existsSync(outputFolder)) { fs.mkdirSync(outputFolder) }
 
-        let newFolder = path.join(__dirname, outputFolder, subParentDir);
+        let newFolder = path.join(outputFolder, subParentDir);
         if (!fs.existsSync(newFolder)) { fs.mkdirSync(path.join(newFolder)) };
 
         let newName = path.join(newFolder, path.dirname(file).split(path.sep).pop() + '.hdbcds');
@@ -139,7 +136,7 @@ async function replace(file) {
 }
 
 function zipping(){
-    zipFolder('src', 'src.zip', function(err) {
+    zipFolder(outputFolder, zipFile, function(err) {
         if(err) {
             console.log('Zipping error', err);
         } else {
@@ -148,9 +145,25 @@ function zipping(){
     });
 }
 
+var deleteFolderRecursive = outputPath => {
+    if (fs.existsSync(outputPath)) {
+      fs.readdirSync(outputPath).forEach(function(file, index){
+        var curPath = path.join(outputPath, file);
+        if (fs.lstatSync(curPath).isDirectory()) { // recurse
+          deleteFolderRecursive(curPath);
+        } else { // delete file
+          fs.unlinkSync(curPath);
+        }
+      });
+      fs.rmdirSync(outputPath);
+    }
+    if (fs.existsSync(zipFile)) {fs.unlinkSync(zipFile)}
+  };
+
 // traverseDir(directoryPath, true);
 
-traverseDir(directoryPath)
+deleteFolderRecursive(outputFolder);
+traverseDir(inputFolder)
   .then(() => zipping())
   .catch(err => console.trace(err));
 
