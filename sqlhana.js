@@ -7,11 +7,8 @@ const readFile = promisify(fs.readFile);
 const lstat = promisify(fs.lstat);
 
 const inputFolder = process.argv[2] || path.join(__dirname, 'sap-hana-ddl');
-console.log("input: ", inputFolder);
 const outputFolder = process.argv[3] || path.join(__dirname, 'src');
-console.log("output: ", outputFolder);
 const zipFile = process.argv[4] || path.join(__dirname, 'src.zip');
-console.log("output: ", outputFolder);
 
 //const directoryPath = path.join(__dirname, inputFolder); // источник
 
@@ -51,8 +48,9 @@ async function traverseDir(dir, first) {
             if (stats.isDirectory()) {
               await traverseDir(fullPath);
             } else {
-              console.log(fullPath);
-              await replace(fullPath);
+            //   console.log('\t', fullPath);
+              let arr = fullPath.split('_');
+              if (arr[arr.length-1] === 'table.sql') await replace(fullPath); // обрабатывать только файлы, оканчивающиеся на _table.sql
             }
           } catch (err) {
             return console.log(err);
@@ -61,7 +59,7 @@ async function traverseDir(dir, first) {
       ),
     );
   } catch (err) {
-    return console.log('Unable to scan directory: ' + err);
+    return console.log('\x1b[31m%s\x1b[0m', 'Unable to scan directory: ' + err);
   }
 }
 
@@ -130,7 +128,7 @@ async function replace(file) {
         if (!fs.existsSync(newFolder)) { fs.mkdirSync(path.join(newFolder)) };
 
         let newName = path.join(newFolder, path.dirname(file).split(path.sep).pop() + '.hdbcds');
-        console.log(newName);
+        console.log('\t', newName);
         fs.writeFileSync(newName, result, 'utf8');
 
 }
@@ -138,9 +136,9 @@ async function replace(file) {
 function zipping(){
     zipFolder(outputFolder, zipFile, function(err) {
         if(err) {
-            console.log('Zipping error', err);
+            console.log('\x1b[31m%s\x1b[0m', 'Zipping error', err);
         } else {
-            console.log('Zipped');
+            console.log('\x1b[32m%s\x1b[0m', 'Zipped');
         }
     });
 }
@@ -157,7 +155,7 @@ var deleteFolderRecursive = outputPath => {
       });
       fs.rmdirSync(outputPath);
     }
-    if (fs.existsSync(zipFile)) {fs.unlinkSync(zipFile)}
+    if (fs.existsSync(zipFile)) {fs.unlinkSync(zipFile)};
   };
 
 // traverseDir(directoryPath, true);
