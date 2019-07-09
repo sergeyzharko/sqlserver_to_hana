@@ -1,39 +1,14 @@
-const path = require('path');
-const fs = require('fs');
-var zipFolder = require('zip-folder');
-const { promisify } = require('util');
-const readDir = promisify(fs.readdir);
-const readFile = promisify(fs.readFile);
-const lstat = promisify(fs.lstat);
+const path = require('path'),
+    fs = require('fs'),
+    zipFolder = require('zip-folder'),
+    { promisify } = require('util'),
+    readDir = promisify(fs.readdir),
+    readFile = promisify(fs.readFile),
+    lstat = promisify(fs.lstat),
 
-const inputFolder = process.argv[2] || path.join(__dirname, 'sap-hana-ddl');
-const outputFolder = process.argv[3] || path.join(__dirname, 'src');
-const zipFile = process.argv[4] || path.join(__dirname, 'src.zip');
-
-//const directoryPath = path.join(__dirname, inputFolder); // источник
-
-// function traverseDir(dir, first) { // рекурсивный перебор файлов
-//     fs.readdir(dir, (err, files) => {
-//         if (err) {
-//             return console.log('Unable to scan directory: ' + err);
-//         } 
-//         files.forEach(file => {
-//             let fullPath = path.join(dir, file);
-//             fs.lstat(fullPath, (err, stats) => {
-//                 if (err) {
-//                     return console.log(err);
-//                 }
-//                 if (stats.isDirectory()) {
-//                     traverseDir(fullPath);
-//                 } else {
-//                     console.log(fullPath);
-//                     replace(fullPath);
-//                 }
-//             })
-//         });
-//     });
-// }
-
+    inputFolder = process.argv[2] || path.join(__dirname, 'sap-hana-ddl');
+    outputFolder = process.argv[3] || path.join(__dirname, 'src');
+    zipFile = process.argv[4] || path.join(__dirname, 'src.zip');
 
 async function traverseDir(dir, first) {
   // рекурсивный перебор файлов
@@ -63,8 +38,6 @@ async function traverseDir(dir, first) {
   }
 }
 
-
-
 async function replace(file) {
     let data = await readFile(file, 'utf8');
         // var parentDir = path.dirname(file).split(path.sep).pop(); // имя папки файла
@@ -74,17 +47,14 @@ async function replace(file) {
         // var parentDir = data.search(/CREATE TABLE \"\w+\:\:/); // namespace from DDL
         // var subParentDir = path.dirname(file).split(path.sep)[path.dirname(file).split(path.sep).length - 2]; // имя папки файла
         let fileName = path.dirname(file).split(path.sep).pop();
-        var result = data
+        data = data
         
             .replace(/\r/g, "") // перевести систему пробелов из CRLF в LF
-            .replace(/(\/\*).*(\*\/)/g, '') // комментарий
-            
-            .replace(/(ALTER.+)\;/g, '// $1')
-            //.replace(/(CREATE TABLE.*\"\(\n  )(\"[^\;]*\;)(\n\nALTER.+\;)/g, '$1key $2')
-                // costraints:
-                // CREATE TABLE - любые символы - "(\n  
-                // " - любые символы кроме ; - ;\nALTER    
+            .replace(/(\/\*).*(\*\/)/g, ''); // удалить комментарии
 
+        data = constraints(data);
+
+        data = data
             .replace(/(\s\s.*[^\,\(\t\s]$)/gm, '$1;') // добавить ; в конце последней строки (нет , ()
             //.replace(/(\s\s.*)\,$/gm, '$1;') // добавить ; в конце каждоый строки
             .replace(/\n\)\;/g, `\n}\ntechnical configuration {\n\tcolumn store;\n};`)
@@ -124,9 +94,7 @@ async function replace(file) {
             .replace(/\n\t\n\t\n/gm, '\n\n') // лишние пустые строки
             .replace(/(\w+\:\:\w+\.)(\w+)/g, '$2'); // название таблицы
 
-            // result = 'namespace sap_hana_ddl.' + ' {\n' + result + '\n\n};';
-           result = `namespace ${entity};\n\ncontext ${fileName} {\n${result}\n\n};`;
-        // result = 'namespace sap_hana_ddl.' + subParentDir + ';\n\ncontext ' + parentDir + ' {\n' + result + '\n\n};';
+           data = `namespace ${entity};\n\ncontext ${fileName} {\n${data}\n\n};`;
         // добавление кода в начало и конец файла
 
         if (!fs.existsSync(outputFolder)) { fs.mkdirSync(outputFolder) }
@@ -136,21 +104,21 @@ async function replace(file) {
 
         let newName = path.join(newFolder, fileName + '.hdbcds');
         console.log('\t', newName);
-        fs.writeFileSync(newName, result, 'utf8');
+        fs.writeFileSync(newName, data, 'utf8');
 
 }
 
-function zipping(){
+let zipping = () => {
     zipFolder(outputFolder, zipFile, function(err) {
         if(err) {
             console.log('\x1b[31m%s\x1b[0m', 'Zipping error', err);
         } else {
             console.log('\x1b[32m%s\x1b[0m', 'Zipped');
         }
-    });
-}
+    })
+};
 
-var deleteFolderRecursive = outputPath => {
+let deleteFolderRecursive = outputPath => {
     if (fs.existsSync(outputPath)) {
       fs.readdirSync(outputPath).forEach(function(file, index){
         var curPath = path.join(outputPath, file);
@@ -163,7 +131,33 @@ var deleteFolderRecursive = outputPath => {
       fs.rmdirSync(outputPath);
     }
     if (fs.existsSync(zipFile)) {fs.unlinkSync(zipFile)};
-  };
+};
+
+let constraints = file => {
+
+    arr = file.match(/ALTER TABLE .* PRIMARY KEY .*\)\;/g) || []; // поиск всех constraints на primary key
+    file = file.replace(/(ALTER.+)\;/g, '// $1'); // закомментировать все constrains
+    if (!arr.length) {return file};
+
+    let b = [];
+
+    arr.forEach((value, index) => {
+        b[index] = {};
+        b[index].tableName = value.replace(/ALTER TABLE \"(.+)\" ADD .*/g, '$1');
+        b[index].fields = JSON.parse('[' + value.replace(/.*\((\".+\")\).*/g, '$1') + ']');
+    });
+
+    b.forEach((value) => {
+        let table = value.tableName.replace(/\:\:/, '\\:\\:');
+        value.fields.forEach((field) => {
+            var re = new RegExp('(CREATE TABLE \\"' + table + '\\"\\(\\n[^//]*  )(\\"'+ field +'\\")',"g");
+            // (\\n[^//]*  ) - с новой строки. кроме комментариев, два пробела в начале строки
+            file = file.replace(re, '$1key $2')
+        });
+    });
+
+    return file;
+}
 
 // traverseDir(directoryPath, true);
 
