@@ -21,7 +21,7 @@ async function traverseDir(dir, first) {
               await traverseDir(fullPath);
             } else {
               let arr = fullPath.split('_');
-              if (arr[arr.length-1] === 'table.sql') { await replaceTable(fullPath) } // обрабатывать файлы, оканчивающиеся на _table.sql
+              if (arr[arr.length-1] === 'table.sql' || arr[arr.length-1] === 'tables.sql') { await replaceTable(fullPath) } // обрабатывать файлы, оканчивающиеся на _table.sql
               else
               if (arr[arr.length-1] === 'fk.sql') { await replaceFk(fullPath) }; // обрабатывать файлы, оканчивающиеся на _fk.sql
             }
@@ -49,7 +49,6 @@ async function fileData (file) {
     if (!fs.existsSync(newFolder)) { fs.mkdirSync(path.join(newFolder)) };
 
     let newName = path.join(newFolder, fileName);
-    console.log('\t', newName);
 
     return { data, newName, entity, fileName };
 }
@@ -59,7 +58,7 @@ async function replaceFk(file) {
     let { data, newName } = await fileData (file);
 
     if (!data) {
-        console.log('\t\t', 'File is empty');
+        console.warn('\x1b[33m%s\x1b[0m', 'File is empty: "' + file + '"');
         return;
     }
 
@@ -68,8 +67,18 @@ async function replaceFk(file) {
         .replace(/(\/\*).*(\*\/)\n/g, '') // удалить комментарии
         .replace(/ALTER TABLE (\"\w+)\:\:([\w\.]+\") ADD CONSTRAINT\s\"(\w+\") (.+)/g, 'CONSTRAINT $1::$3 ON $1::$2 $4');
     
-    newName = newName + '.hdbconstraint';
-    fs.writeFileSync(newName, data, 'utf8');
+    // Все в один файл:
+    // newName = newName + '.hdbconstraint';
+    // fs.writeFileSync(newName, data, 'utf8');
+
+    arr = data.match(/CONSTRAINT .*\;/g);
+
+    arr.forEach( value => {
+        let fileName = value.match(/\:\:\w+\" ON/)[0].match(/\w+/)[0];
+        fileName = newName + '_' + fileName + '.hdbconstraint';
+        fs.writeFileSync(fileName, value, 'utf8');
+        console.log('\t', fileName);
+    });
 
 }
 
@@ -78,7 +87,7 @@ async function replaceTable(file) {
     let { data, newName, entity, fileName } = await fileData (file);
 
     if (!data) {
-        console.log('\t\t', 'File is empty');
+        console.warn('\x1b[33m%s\x1b[0m', 'File is empty: "' + file + '"');
         return;
     }
 
@@ -122,7 +131,6 @@ async function replaceTable(file) {
         .replace(/\"\s?\(/g, '"{') // скобка после названия таблицы
         .replace(/\/\*w*\*\//g, '') // убрать комментарии
         .replace(/\,$/gm, ';') // ; в конце каждоый строки вместо ,
-        //.replace(/(\d+)\;(\d+)/g, '$1,$2') // ; между двумя числами;
         .replace(/^/gm, "\t") // добавить табуляцию в начало строки
         .replace(/\n\t\n\t\n/gm, '\n\n') // лишние пустые строки
         .replace(/(\w+\:\:\w+\.)(\w+)/g, '$2'); // название таблицы
@@ -131,6 +139,7 @@ async function replaceTable(file) {
     
     newName = newName + '.hdbcds';
     fs.writeFileSync(newName, data, 'utf8');
+    console.log('\t', newName);
 
 }
 
