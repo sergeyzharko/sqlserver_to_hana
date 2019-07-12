@@ -23,7 +23,8 @@ async function traverseDir(dir, first) {
               let arr = fullPath.split('_');
               if (arr[arr.length-1] === 'table.sql' || arr[arr.length-1] === 'tables.sql') { await replaceTable(fullPath) } // обрабатывать файлы, оканчивающиеся на _table.sql
               else
-              if (arr[arr.length-1] === 'fk.sql') { await replaceFk(fullPath) }; // обрабатывать файлы, оканчивающиеся на _fk.sql
+              if (arr[arr.length-1] === 'fk.sql') { await replaceFk(fullPath) } // обрабатывать файлы, оканчивающиеся на _fk.sql
+              else { console.warn('\x1b[33m%s\x1b[0m', 'File has been skipped: "' + fullPath + '"') };
             }
           } catch (err) {
             return console.log(err);
@@ -38,9 +39,12 @@ async function traverseDir(dir, first) {
 
 async function fileData (file) {
     let data = await fsp.readFile(file, 'utf8');
-    let createString = data.search(/ TABLE \"\w+\:\:/);
-    let lastChar = data.indexOf('::');
-    let entity = data.slice(createString+8, lastChar);
+    if (!data) {
+      return { data };
+    }
+    let createString = data.match(/ TABLE \"\w+\:\:/);
+    let lastChar = createString[0].indexOf('::');
+    let entity = createString[0].slice(8, lastChar);
     let fileName = path.dirname(file).split(path.sep).pop();
 
     if (!fs.existsSync(outputFolder)) { fs.mkdirSync(outputFolder) }
@@ -93,7 +97,8 @@ async function replaceTable(file) {
 
     data = data
         .replace(/\r/g, "") // перевести систему пробелов из CRLF в LF
-        .replace(/(\/\*).*(\*\/)/g, ''); // удалить комментарии
+        .replace(/(\/\*).*(\*\/)/g, '') // удалить комментарии
+        .replace(/\n\nDROP.*\;/g, ''); // удалить DROP
 
     data = constraints(data);
 
@@ -165,7 +170,8 @@ let deleteFolderRecursive = outputPath => {
       });
       fs.rmdirSync(outputPath);
     }
-    if (fs.existsSync(zipFile)) {fs.unlinkSync(zipFile)};
+    if (!fs.existsSync(outputFolder)) { fs.mkdirSync(outputFolder) };
+    if (fs.existsSync(path.join(outputFolder, zipFile))) { fs.unlinkSync(path.join(outputFolder, zipFile)) };
 };
 
 let constraints = file => {
