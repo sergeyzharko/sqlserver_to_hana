@@ -50,12 +50,12 @@ async function fileData (file) {
 
     let newName = path.join(newFolder, fileName);
 
-    return { data, newName, entity, fileName };
+    return { data, newName, entity, fileName, newFolder };
 }
 
 async function replaceFk(file) {
 
-    let { data, newName } = await fileData (file);
+    let { data, newName, entity, fileName, newFolder } = await fileData (file);
 
     if (!data) {
         console.warn('\x1b[33m%s\x1b[0m', 'File is empty: "' + file + '"');
@@ -75,7 +75,7 @@ async function replaceFk(file) {
 
     arr.forEach( value => {
         let fileName = value.match(/\:\:\w+\" ON/)[0].match(/\w+/)[0];
-        fileName = newName + '_' + fileName + '.hdbconstraint';
+        fileName = path.join(newFolder, fileName) + '.hdbconstraint';
         fs.writeFileSync(fileName, value, 'utf8');
         console.log('\t', fileName);
     });
