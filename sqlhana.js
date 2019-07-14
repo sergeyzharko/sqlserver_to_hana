@@ -24,6 +24,8 @@ async function traverseDir(dir, first) {
               if (arr[arr.length-1] === 'table.sql' || arr[arr.length-1] === 'tables.sql') { await replaceTable(fullPath) } // обрабатывать файлы, оканчивающиеся на _table.sql
               else
               if (arr[arr.length-1] === 'fk.sql') { await replaceFk(fullPath) } // обрабатывать файлы, оканчивающиеся на _fk.sql
+              else
+              if (arr[arr.length-1] === 'init.sql') { await replaceInit(fullPath) } // обрабатывать файлы, оканчивающиеся на _init.sql
               else { console.warn('\x1b[33m%s\x1b[0m', 'File has been skipped: "' + fullPath + '"') };
             }
           } catch (err) {
@@ -42,9 +44,9 @@ async function fileData (file) {
     if (!data) {
       return { data };
     }
-    let createString = data.match(/ TABLE \"\w+\:\:/);
+    let createString = data.match(/\"\w+\:\:/);
     let lastChar = createString[0].indexOf('::');
-    let entity = createString[0].slice(8, lastChar);
+    let entity = createString[0].slice(1, lastChar);
     let fileName = path.dirname(file).split(path.sep).pop();
 
     if (!fs.existsSync(outputFolder)) { fs.mkdirSync(outputFolder) }
@@ -55,6 +57,56 @@ async function fileData (file) {
     let newName = path.join(newFolder, fileName);
 
     return { data, newName, entity, fileName, newFolder };
+}
+
+async function replaceInit(file) {
+
+  let { data, newName, entity, fileName, newFolder } = await fileData (file);
+
+  if (!data) {
+      console.warn('\x1b[33m%s\x1b[0m', 'File is empty: "' + file + '"');
+      return;
+  }
+
+  data = data
+      .replace(/\r/g, "") // перевести систему пробелов из CRLF в LF
+      .replace(/\)\nVALUES/g, ') VALUES');
+  
+  var arr = data.split(/\n\n\n/);
+
+  arr.forEach( value => {
+    var columnNames = value.match(/\"\(\"[\w+\s\,\"]+\) VALUES/g);
+    var maxCoulumnNames = columnNames.reduce(function (a, b) { return a.length > b.length ? a : b; }).slice(2,-8);
+    var maxCoulumnNamesClear = maxCoulumnNames.replace(/\"/g, '').replace(/\s/g, '');
+    var values = value.replace(/INSERT INTO[\w+\s\,\"\:\(\)]+ VALUES\(([\w+\s\,\']+)\)\;/g, '$1').replace(/\'/g, '');
+    let tableName = value.match(/\:\:\w+\"\(\"/)[0].match(/\w+/)[0];
+
+  var hdbtabledata = `{
+      "format_version": 1,
+      "imports": [
+          {
+              "target_table": "${entity}::${fileName}.${tableName}",
+              "source_data": {
+                  "data_type": "CSV",
+                  "file_name": "${entity}::${tableName}.csv",
+                  "has_header": true
+              },
+              "import_settings": {
+                  "import_columns": [
+                      ${maxCoulumnNames}
+                  ]
+              }
+          }
+      ]
+  }`;
+
+    fileName = path.join(newFolder, tableName) + '.hdbtabledata';
+    fs.writeFileSync(fileName, hdbtabledata, 'utf8');
+    fileName = path.join(newFolder, tableName) + '.csv';
+    fs.writeFileSync(fileName, maxCoulumnNamesClear + '\n' + values, 'utf8');
+    console.log('\t', fileName);
+  });
+
 }
 
 async function replaceFk(file) {
