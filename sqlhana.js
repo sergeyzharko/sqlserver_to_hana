@@ -7,6 +7,8 @@ const path =        require('path'),
     outputFolder =  process.argv[3] || path.join(__dirname, 'src');
     zipFile =       process.argv[4] || path.join(__dirname, 'src.zip');
 
+    let tableCounter = {};
+
 async function traverseDir(dir, first) {
   // рекурсивный перебор файлов
   const files = await fsp.readdir(dir);
@@ -40,23 +42,23 @@ async function traverseDir(dir, first) {
 }
 
 async function fileData (file) {
-    let data = await fsp.readFile(file, 'utf8');
-    if (!data) {
-      return { data };
-    }
-    let createString = data.match(/\"\w+\:\:/);
-    let lastChar = createString[0].indexOf('::');
-    let entity = createString[0].slice(1, lastChar);
-    let fileName = path.dirname(file).split(path.sep).pop();
+  console.log(file);
+  let data = await fsp.readFile(file, 'utf8');
+  if (!data) {
+    return { data };
+  }
+  let createString = data.match(/\"\w+\:\:/);
+  let lastChar = createString[0].indexOf('::');
+  let entity = createString[0].slice(1, lastChar);
+  let fileName = path.dirname(file).split(path.sep).pop();
 
-    if (!fs.existsSync(outputFolder)) { fs.mkdirSync(outputFolder) }
+  if (!fs.existsSync(outputFolder)) { fs.mkdirSync(outputFolder) }
 
-    let newFolder = path.join(outputFolder, entity);
-    if (!fs.existsSync(newFolder)) { fs.mkdirSync(path.join(newFolder)) };
+  let newFolder = path.join(outputFolder, entity);
+  if (!fs.existsSync(newFolder)) { fs.mkdirSync(path.join(newFolder)) };
 
-    let newName = path.join(newFolder, fileName);
-
-    return { data, newName, entity, fileName, newFolder };
+  let newName = path.join(newFolder, fileName);
+  return { data, newName, entity, fileName, newFolder };
 }
 
 async function replaceInit(file) {
@@ -70,7 +72,8 @@ async function replaceInit(file) {
 
   data = data
       .replace(/\r/g, "") // перевести систему пробелов из CRLF в LF
-      .replace(/\)\nVALUES/g, ') VALUES');
+      .replace(/\)\nVALUES/g, ') VALUES')
+      .replace(/VALUES\s\(/g, 'VALUES(');
   
   var arr = data.split(/\n\n\n/);
 
@@ -78,33 +81,51 @@ async function replaceInit(file) {
     var columnNames = value.match(/\"\(\"[\w+\s\,\"]+\) VALUES/g);
     var maxCoulumnNames = columnNames.reduce(function (a, b) { return a.length > b.length ? a : b; }).slice(2,-8);
     var maxCoulumnNamesClear = maxCoulumnNames.replace(/\"/g, '').replace(/\s/g, '');
-    var values = value.replace(/INSERT INTO[\w+\s\,\"\:\(\)]+ VALUES\(([\w+\s\,\']+)\)\;/g, '$1').replace(/\'/g, '');
+    var values = value.replace(/INSERT INTO[\w+\s\,\"\:\(\)]+ VALUES\((.+)\)\;/g, '$1').replace(/\'/g, '');
+    var numberOfColumns = maxCoulumnNamesClear.split(',').length;
+    var rows = values.split('\n');
+    var newRows = '';
+    rows.forEach( value => {
+      var elements = value.split(',');
+      let newRow = '';
+      for(i = 0; i < numberOfColumns; i++) {
+        if (elements[i]) {
+          newRow = newRow + elements[i] + ',';
+        }
+        else {
+          newRow = newRow + ',';
+        }
+      }
+      newRows = newRows + newRow.slice(0, -1) + '\n';
+    });
+
     let tableName = value.match(/\:\:\w+\"\(\"/)[0].match(/\w+/)[0];
+    console.log(tableName, ' ', numberOfColumns);
 
-  var hdbtabledata = `{
-      "format_version": 1,
-      "imports": [
-          {
-              "target_table": "${entity}::${fileName}.${tableName}",
-              "source_data": {
-                  "data_type": "CSV",
-                  "file_name": "${entity}::${tableName}.csv",
-                  "has_header": true
-              },
-              "import_settings": {
-                  "import_columns": [
-                      ${maxCoulumnNames}
-                  ]
-              }
-          }
-      ]
-  }`;
+    var hdbtabledata = `{
+        "format_version": 1,
+        "imports": [
+            {
+                "target_table": "${entity}::${fileName}.${tableName}",
+                "source_data": {
+                    "data_type": "CSV",
+                    "file_name": "${entity}::${tableName}.csv",
+                    "has_header": true
+                },
+                "import_settings": {
+                    "import_columns": [
+                        ${maxCoulumnNames}
+                    ]
+                }
+            }
+        ]
+    }`;
 
-    fileName = path.join(newFolder, tableName) + '.hdbtabledata';
-    fs.writeFileSync(fileName, hdbtabledata, 'utf8');
-    fileName = path.join(newFolder, tableName) + '.csv';
-    fs.writeFileSync(fileName, maxCoulumnNamesClear + '\n' + values, 'utf8');
-    console.log('\t', fileName);
+    let fullFileName = path.join(newFolder, tableName) + '.hdbtabledata';
+    fs.writeFileSync(fullFileName, hdbtabledata, 'utf8');
+    fullFileName = path.join(newFolder, tableName) + '.csv';
+    fs.writeFileSync(fullFileName, maxCoulumnNamesClear + '\n' + newRows.slice(0, -1), 'utf8');
+    console.log('\t', fullFileName);
   });
 
 }
@@ -147,6 +168,10 @@ async function replaceTable(file) {
         return;
     }
 
+    // Счётчик количества таблиц по entity
+    if (tableCounter[entity]) { tableCounter[entity] = tableCounter[entity] + data.match(/CREATE TABLE/g).length }
+    else tableCounter[entity] = data.match(/CREATE TABLE/g).length;
+
     data = data
         .replace(/\r/g, "") // перевести систему пробелов из CRLF в LF
         .replace(/(\/\*).*(\*\/)/g, '') // удалить комментарии
@@ -159,6 +184,7 @@ async function replaceTable(file) {
         .replace(/\n\)\;/g, `\n}\ntechnical configuration {\n\tcolumn store;\n};`)
         .replace(/CREATE TABLE/g, 'entity')
         .replace(/NOT NULL GENERATED BY DEFAULT AS IDENTITY/g, 'generated by default as identity(start with 1 increment by 1 no minvalue no maxvalue no cache no cycle)')
+        .replace(/IDENTITY\(1,1\) NOT NULL/g, 'generated by default as identity(start with 1 increment by 1 no minvalue no maxvalue no cache no cycle)')
         .replace(/NOT NULL/g, 'not null')
         .replace(/ NULL/g, ' null')
         .replace(/(N)('.*')/g, '$2') // default N'@UNKNOWN'
@@ -171,7 +197,7 @@ async function replaceTable(file) {
         .replace(/NVARCHAR\(/g, ': String(')
         .replace(/VARCHAR\(/g, ': String(')
         .replace(/NCHAR\(/g, ': String(')
-        .replace(/BIGINT/g, ': Integer')
+        .replace(/BIGINT/g, ': Integer64')
         .replace(/TINYINT/g, ': Integer')
         .replace(/INTEGER/g, ': Integer')
         .replace(/\sINT/g, ' : Integer')
@@ -183,7 +209,10 @@ async function replaceTable(file) {
         .replace(/VARBINARY/g, ': Binary(100)')
         .replace(/BINARY/g, ': Binary(100)')
         .replace(/TEXT/g, ': LargeString')
+        .replace(/DATETIME/g, ': UTCDateTime')
         .replace(/DATE/g, ': LocalDate')
+        .replace(/BIT/g, ': Integer')
+        .replace(/\(max\)/g, '(5000)')
         
         .replace(/\"\s?\(/g, '"{') // скобка после названия таблицы
         .replace(/\/\*w*\*\//g, '') // убрать комментарии
@@ -208,6 +237,7 @@ let zipping = () => {
             console.log('\x1b[32m%s\x1b[0m', 'Zipped');
         }
     })
+    console.log('Number of tables: ', tableCounter);
 };
 
 let deleteFolderRecursive = outputPath => {
